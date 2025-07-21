@@ -4,4 +4,5 @@
 
 A plugin supplying a default agent to be used in a Caldera operation.
 
+
 [Read the full docs](https://caldera.readthedocs.io/en/latest/Plugin-library.html#sandcat)
