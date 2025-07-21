@@ -7,7 +7,6 @@ jobs:
     name: Build Cross-Platform Agents
     runs-on: ubuntu-latest
     
-    # This top-level env block makes the secret available to all steps
     env:
       CALDERA_URL: ${{ secrets.CALDERA_SERVER_URL }}
 
@@ -15,15 +14,14 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
       with:
-        fetch-depth: 1 # Fetches only the latest commit
+        fetch-depth: 1
 
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.22' # Using a specific stable version is good practice
+        go-version: '1.22'
 
     - name: Download Go modules
-      # The working-directory directive makes all commands in this step run inside gocat
       working-directory: ./gocat 
       run: go mod tidy
 
@@ -56,9 +54,10 @@ jobs:
     - name: Build for Oracle Linux 8 (amd64)
       working-directory: ./gocat
       run: |
-        # This generic linux/amd64 build is compatible with Oracle Linux 8 x86_64
         go build -o sandcat-ol8-amd64 -ldflags="-s -w -X main.server=${{ env.CALDERA_URL }} -X main.group=oracle-linux" sandcat.go
       env:
+        # THIS FIX makes the binary portable by removing the dependency on GLIBC
+        CGO_ENABLED: 0
         GOOS: linux
         GOARCH: amd64
 
@@ -72,11 +71,9 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: sandcat-binaries
-        # The path where the compiled binaries are located
         path: |
           gocat/sandcat-windows-amd64.exe
           gocat/sandcat-darwin-amd64
           gocat/sandcat-darwin-arm64
           gocat/sandcat-ol8-amd64
-        # Artifact will be available for 1 week
-        retention-days: 7 
+        retention-days: 7
