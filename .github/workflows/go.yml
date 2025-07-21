@@ -1,61 +1,82 @@
-name: Sandcat Basic
+name: Build Sandcat Agents
 
 on: [push, pull_request]
 
 jobs:
-
-  build:
+  build-agents:
+    name: Build Cross-Platform Agents
     runs-on: ubuntu-latest
+    
+    # This top-level env block makes the secret available to all steps
+    env:
+      CALDERA_URL: ${{ secrets.CALDERA_SERVER_URL }}
+
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout repository
+      uses: actions/checkout@v4
       with:
-        fetch-depth: 1
+        fetch-depth: 1 # Fetches only the latest commit
 
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: 1.24
+        go-version: '1.22' # Using a specific stable version is good practice
 
-    - name: Mod tidy
-      run: |
-        cd gocat
-        go mod tidy
+    - name: Download Go modules
+      # The working-directory directive makes all commands in this step run inside gocat
+      working-directory: ./gocat 
+      run: go mod tidy
 
-    - name: Build Windows
+    # --- Build Steps for Each Platform ---
+
+    - name: Build for Windows (amd64)
+      working-directory: ./gocat
       run: |
-        cd gocat
-        go build -o sandcat.go-windows -ldflags="-s -w" sandcat.go
-        file sandcat.go-windows && ls -al sandcat.go-windows
+        go build -o sandcat-windows-amd64.exe -ldflags="-s -w -X main.server=${{ env.CALDERA_URL }} -X main.group=windows" sandcat.go
       env:
         GOOS: windows
+        GOARCH: amd64
 
-    - name: Build Darwin amd64
+    - name: Build for macOS (amd64)
+      working-directory: ./gocat
       run: |
-        cd gocat
-        go build -o sandcat.go-darwin-amd64 -ldflags="-s -w" sandcat.go
-        file sandcat.go-darwin-amd64 && ls -al sandcat.go-darwin-amd64
+        go build -o sandcat-darwin-amd64 -ldflags="-s -w -X main.server=${{ env.CALDERA_URL }} -X main.group=darwin" sandcat.go
       env:
         GOOS: darwin
         GOARCH: amd64
 
-    - name: Build Darwin arm64
+    - name: Build for macOS (arm64 / Apple Silicon)
+      working-directory: ./gocat
       run: |
-        cd gocat
-        go build -o sandcat.go-darwin-arm64 -ldflags="-s -w" sandcat.go
-        file sandcat.go-darwin-arm64 && ls -al sandcat.go-darwin-arm64
+        go build -o sandcat-darwin-arm64 -ldflags="-s -w -X main.server=${{ env.CALDERA_URL }} -X main.group=darwin" sandcat.go
       env:
         GOOS: darwin
         GOARCH: arm64
 
-    - name: Build Linux
+    - name: Build for Oracle Linux 8 (amd64)
+      working-directory: ./gocat
       run: |
-        cd gocat
-        go build -o sandcat.go-linux -ldflags="-s -w" sandcat.go
-        file sandcat.go-linux && ls -al sandcat.go-linux && ./sandcat.go-linux -help
+        # This generic linux/amd64 build is compatible with Oracle Linux 8 x86_64
+        go build -o sandcat-ol8-amd64 -ldflags="-s -w -X main.server=${{ env.CALDERA_URL }} -X main.group=oracle-linux" sandcat.go
       env:
         GOOS: linux
+        GOARCH: amd64
 
-    - name: Golang Unit Tests
-      run: |
-        cd gocat
-        go test -v ./...
+    - name: Run Go Unit Tests
+      working-directory: ./gocat
+      run: go test -v ./...
+
+    # --- Package and Upload Artifacts ---
+
+    - name: Upload all Sandcat binaries as artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: sandcat-binaries
+        # The path where the compiled binaries are located
+        path: |
+          gocat/sandcat-windows-amd64.exe
+          gocat/sandcat-darwin-amd64
+          gocat/sandcat-darwin-arm64
+          gocat/sandcat-ol8-amd64
+        # Artifact will be available for 1 week
+        retention-days: 7 
